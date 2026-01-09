@@ -1,452 +1,373 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const grid = document.getElementById('grid');
-  const bombCountEl = document.getElementById('bomb-count');
-  const timerEl = document.getElementById('timer');
-  const smiley = document.getElementById('smiley');
-  const result = document.getElementById('result');
-  const bestTimeEl = document.getElementById('best-time');
-  const themeToggle = document.getElementById('theme-toggle');
-  const customSettings = document.getElementById('custom-settings');
-  const customBtn = document.getElementById('custom-btn');
-  const applyCustom = document.getElementById('apply-custom');
-  const errorMessage = document.getElementById('error-message');
-
-  let width, height, bombAmount, totalCells;
-  let squares = [];
-  let flags = 0;
-  let revealedCount = 0;
-  let isGameOver = false;
-  let timerInterval;
-  let seconds = 0;
-  let firstClick = true;
-  let currentLevel = 'medium';
-
-  const levels = {
-    easy:   { w: 9,  h: 9,  bombs: 10 },
-    medium: { w: 16, h: 16, bombs: 40 },
-    hard:   { w: 30, h: 16, bombs: 99 }
-  };
-
-  // --- Các Event Listener giữ nguyên như cũ ---
-  themeToggle.addEventListener('click', () => {
-    document.body.classList.toggle('dark-mode');
-    themeToggle.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
-  });
-
-  customBtn.addEventListener('click', () => customSettings.classList.toggle('show'));
-
-  applyCustom.addEventListener('click', () => {
-    const w = parseInt(document.getElementById('custom-width').value);
-    const h = parseInt(document.getElementById('custom-height').value);
-    const b = parseInt(document.getElementById('custom-bombs').value);
-
-    if (isNaN(w) || isNaN(h) || isNaN(b)) return;
-
-    const maxBombs = Math.floor(w * h * 0.8);
-    if (b < 1 || b > maxBombs) {
-      errorMessage.textContent = `Số bom phải từ 1 đến ${maxBombs} (80% số ô)`;
-      errorMessage.classList.add('show');
-      return;
-    }
-
-    errorMessage.classList.remove('show');
-    levels.custom = { w, h, bombs: b };
-    currentLevel = 'custom';
-    customSettings.classList.remove('show');
-    document.querySelectorAll('.levels button').forEach(btn => btn.classList.remove('active'));
-    customBtn.classList.add('active');
-    initGame('custom');
-  });
-
-  document.querySelectorAll('.levels button:not(#custom-btn)').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.levels button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      customSettings.classList.remove('show');
-      initGame(btn.dataset.level);
-    });
-  });
-
-  smiley.addEventListener('click', () => initGame(currentLevel));
-
-
-  // --- INIT GAME ---
-  function initGame(level = 'medium') {
-    clearInterval(timerInterval);
-    seconds = 0;
-    timerEl.textContent = '000';
-    firstClick = true;
-    isGameOver = false;
-    flags = 0;
-    revealedCount = 0;
-    result.textContent = '';
-    smiley.textContent = '🙂';
-    
-    if (level === 'custom' && !levels.custom) level = 'medium';
-    currentLevel = level;
-
-    const config = levels[level];
-    width = config.w;
-    height = config.h;
-    bombAmount = config.bombs;
-    totalCells = width * height;
-
-    grid.style.width = `${Math.min(width * 32, window.innerWidth - 20)}px`;
-    grid.innerHTML = '';
-    squares = [];
-
-    bombCountEl.textContent = bombAmount.toString().padStart(3, '0');
-    loadBestTime(level);
-
-    for (let i = 0; i < totalCells; i++) {
-      const square = document.createElement('div');
-      square.classList.add('square');
-      square.dataset.id = i;
-      square.addEventListener('click', () => leftClick(square));
-      square.addEventListener('contextmenu', e => {
-        e.preventDefault();
-        rightClick(square);
-      });
-      grid.appendChild(square);
-      squares.push(square);
-    }
-  }
-
-  // ============ LOGIC ĐÃ ĐƯỢC SỬA VÀ TỐI ƯU ============
-
-  function resetBoardState() {
-    squares.forEach(sq => {
-      sq.className = 'square'; // Reset class nhanh hơn
-      sq.textContent = '';
-      sq.removeAttribute('data-number');
-    });
-  }
-
-  // Thuật toán xáo trộn Fisher-Yates (Tạo ngẫu nhiên chuẩn xác nhất)
-  function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
-    }
-  }
-
-  function generateNoGuessingBombs(startId) {
-    // Ở mức khó, giới hạn số lần thử để tránh treo máy.
-    // Nếu quá khó tạo bảng No Guessing (do mật độ bom cao), sẽ dùng bảng ngẫu nhiên.
-    const maxAttempts = 50; 
-    let attempts = 0;
-    
-    const forbiddenZone = new Set([startId, ...getNeighbors(startId)]);
-
-    while (attempts < maxAttempts) {
-      attempts++;
-      resetBoardState();
-
-      // 1. Tạo danh sách tất cả các ô có thể đặt bom
-      const candidates = [];
-      for (let i = 0; i < totalCells; i++) {
-        if (!forbiddenZone.has(i)) candidates.push(i);
-      }
-
-      // 2. Xáo trộn và lấy N ô đầu tiên (Cách tối ưu nhất để rải bom)
-      shuffleArray(candidates);
-      const bombIndices = candidates.slice(0, bombAmount);
-      
-      // 3. Đặt bom
-      bombIndices.forEach(idx => squares[idx].classList.add('bomb'));
-
-      // 4. Tính số
-      calculateNumbers();
-
-      // 5. Kiểm tra tính giải được
-      if (isSolvableNoGuessing(startId)) {
-        console.log(`Tạo thành công sau ${attempts} lần thử.`);
-        return;
-      }
-    }
-
-    // Nếu thất bại, dùng fallback (Random thuần túy)
-    console.log('Chuyển sang chế độ Random (Fallback)');
-    resetBoardState();
-    generateFallbackBombs(startId);
-    calculateNumbers();
-  }
-
-  // Hàm tạo bom dự phòng (Sử dụng Fisher-Yates để đảm bảo không bị dồn cục)
-  function generateFallbackBombs(startId) {
-    const forbiddenZone = new Set([startId, ...getNeighbors(startId)]);
-    const candidates = [];
-    for (let i = 0; i < totalCells; i++) {
-      if (!forbiddenZone.has(i)) candidates.push(i);
-    }
-    shuffleArray(candidates);
-    const bombIndices = candidates.slice(0, bombAmount);
-    bombIndices.forEach(idx => squares[idx].classList.add('bomb'));
-  }
-
-  // Logic giải đố mô phỏng (Đã tối ưu hóa tốc độ)
-  function isSolvableNoGuessing(startId) {
-    const simRevealed = new Set();
-    const simBombs = new Set();
-    const toRevealQueue = [startId]; // Dùng hàng đợi thay vì đệ quy
-    
-    // Hàm phụ: mở an toàn một ô trong mô phỏng
-    const safeReveal = (id) => {
-        if (simRevealed.has(id) || simBombs.has(id)) return;
-        simRevealed.add(id);
-        
-        const numStr = squares[id].getAttribute('data-number');
-        const num = numStr ? parseInt(numStr) : 0;
-        
-        // Nếu là ô 0, thêm tất cả hàng xóm vào hàng đợi để mở tiếp
-        if (num === 0) {
-            getNeighbors(id).forEach(n => {
-                if (!simRevealed.has(n)) toRevealQueue.push(n);
-            });
-        }
+    // --- CẤU HÌNH ---
+    const LEVELS = {
+        easy: { width: 9, height: 9, bombs: 10 },
+        medium: { width: 16, height: 16, bombs: 40 },
+        hard: { width: 30, height: 16, bombs: 99 }
     };
+    
+    // --- BIẾN TRẠNG THÁI ---
+    let width = 16;
+    let height = 16;
+    let bombCount = 40;
+    let flags = 0;
+    let squares = [];
+    let isGameOver = false;
+    let isWin = false;
+    let timerId;
+    let timeElapsed = 0;
+    let isFirstClick = true;
 
-    // Bước 1: Mở vùng khởi đầu
-    while(toRevealQueue.length > 0) {
-        const id = toRevealQueue.shift();
-        safeReveal(id);
+    // --- DOM ELEMENTS ---
+    const grid = document.getElementById('grid');
+    const bombCountDisplay = document.getElementById('bomb-count');
+    const timerDisplay = document.getElementById('timer');
+    const smiley = document.getElementById('smiley');
+    const resultDisplay = document.getElementById('result');
+    const levelBtns = document.querySelectorAll('.levels button[data-level]');
+    const customSettings = document.getElementById('custom-settings');
+    const applyCustomBtn = document.getElementById('apply-custom');
+    const themeToggle = document.getElementById('theme-toggle');
+    const bestTimeDisplay = document.getElementById('best-time');
+
+    // --- KHỞI TẠO GAME ---
+    function initGame(level = 'medium') {
+        isGameOver = false;
+        isWin = false;
+        isFirstClick = true;
+        flags = 0;
+        squares = [];
+        timeElapsed = 0;
+        clearInterval(timerId);
+        timerDisplay.innerText = '000';
+        resultDisplay.innerText = '';
+        smiley.innerText = '🙂';
+        grid.innerHTML = '';
+        
+        if (level !== 'custom') {
+            width = LEVELS[level].width;
+            height = LEVELS[level].height;
+            bombCount = LEVELS[level].bombs;
+            customSettings.classList.remove('show');
+        } else {
+            customSettings.classList.add('show');
+            return; 
+        }
+
+        startBoard();
     }
 
-    // Bước 2: Vòng lặp logic
-    let changed = true;
-    while (changed) {
-      changed = false;
-      
-      // Chỉ duyệt qua các ô "biên" (đã mở nhưng chưa xử lý hết hàng xóm)
-      // Để tối ưu, ta có thể duy trì danh sách biên, nhưng duyệt toàn bộ simRevealed cũng ổn
-      for (const i of simRevealed) {
-        const numStr = squares[i].getAttribute('data-number');
-        const num = numStr ? parseInt(numStr) : 0;
-        if (num === 0) continue; // Ô 0 đã được xử lý tự động ở trên
+    function startBoard() {
+        bombCountDisplay.innerText = bombCount.toString().padStart(3, '0');
+        grid.style.gridTemplateColumns = `repeat(${width}, 30px)`;
+        grid.style.width = 'fit-content';
+        
+        for (let i = 0; i < width * height; i++) {
+            const square = document.createElement('div');
+            square.setAttribute('id', i);
+            square.classList.add('square');
+            
+            square.addEventListener('click', () => click(square));
+            square.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                addFlag(square);
+            });
+            square.addEventListener('mousedown', () => { if(!isGameOver) smiley.innerText = '😮'; });
+            square.addEventListener('mouseup', () => { if(!isGameOver) smiley.innerText = '🙂'; });
 
-        const neighbors = getNeighbors(i);
-        const unknownNeighbors = [];
-        let foundBombsCount = 0;
+            grid.appendChild(square);
+            squares.push(square);
+        }
+    }
 
-        // Phân loại hàng xóm
-        for (const n of neighbors) {
-            if (simBombs.has(n)) {
-                foundBombsCount++;
-            } else if (!simRevealed.has(n)) {
-                unknownNeighbors.push(n);
+    // --- LOGIC GAME QUAN TRỌNG: Rải bom tránh vùng click ---
+    function placeBombs(firstClickIndex) {
+        // 1. Xác định "Vùng an toàn" (Safe Zone)
+        const neighbors = getNeighbors(firstClickIndex);
+        const safeZone = [firstClickIndex, ...neighbors];
+
+        // 2. Tìm tất cả các vị trí còn lại trong bảng có thể đặt bom
+        let validLocations = [];
+        for (let i = 0; i < width * height; i++) {
+            if (!safeZone.includes(i)) {
+                validLocations.push(i);
             }
         }
 
-        if (unknownNeighbors.length === 0) continue;
+        // 3. Xáo trộn danh sách vị trí hợp lệ
+        validLocations.sort(() => Math.random() - 0.5);
 
-        // Logic A: Nếu số bom đã tìm thấy == số trên ô -> MỞ các ô còn lại
-        if (foundBombsCount === num) {
-          unknownNeighbors.forEach(n => {
-             // Thêm vào hàng đợi để xử lý lan truyền ngay lập tức nếu nó là 0
-             if (!simRevealed.has(n)) {
-                 toRevealQueue.push(n);
-                 changed = true;
-             }
-          });
-        }
+        // 4. Lấy n vị trí đầu tiên để đặt bom
+        let actualBombsCount = Math.min(bombCount, validLocations.length);
+        const bombIndices = validLocations.slice(0, actualBombsCount);
+
+        // 5. Cập nhật dữ liệu cho các ô trên bàn cờ
+        squares.forEach((sq, index) => {
+            sq.classList.remove('bomb', 'valid'); 
+            
+            if (bombIndices.includes(index)) {
+                sq.classList.add('bomb');
+                sq.setAttribute('data', 'bomb');
+            } else {
+                sq.classList.add('valid');
+                sq.setAttribute('data', 'valid');
+            }
+        });
         
-        // Logic B: Nếu số ô chưa biết + số bom đã tìm == số trên ô -> ĐÁNH CỜ các ô còn lại
-        else if (foundBombsCount + unknownNeighbors.length === num) {
-          unknownNeighbors.forEach(n => {
-             if (!simBombs.has(n)) {
-                 simBombs.add(n);
-                 changed = true;
-             }
-          });
-        }
-      }
-
-      // Xử lý hàng đợi mở rộng (Flood fill) ngay trong vòng lặp logic
-      while(toRevealQueue.length > 0) {
-          const id = toRevealQueue.shift();
-          safeReveal(id);
-          // Việc mở thêm ô mới có thể tạo ra dữ kiện mới, nên cần lặp lại logic
-          changed = true; 
-      }
-    }
-
-    // Nếu tổng số ô đã xác định (Mở + Bom) == Tổng số ô -> Giải thành công
-    return (simRevealed.size + simBombs.size) === totalCells;
-  }
-
-  function calculateNumbers() {
-    for (let i = 0; i < totalCells; i++) {
-      if (squares[i].classList.contains('bomb')) continue;
-      let count = 0;
-      getNeighbors(i).forEach(n => {
-        if (squares[n].classList.contains('bomb')) count++;
-      });
-      if (count > 0) squares[i].setAttribute('data-number', count);
-    }
-  }
-
-  function getNeighbors(id) {
-    const x = id % width;
-    const y = Math.floor(id / width);
-    const neighbors = [];
-    // Sử dụng mảng cố định để loop nhanh hơn
-    const offsets = [[-1,-1], [0,-1], [1,-1], [-1,0], [1,0], [-1,1], [0,1], [1,1]];
-    
-    for (const [dx, dy] of offsets) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-            neighbors.push(ny * width + nx);
+        // 6. Tính toán số bom xung quanh (data-total) cho TOÀN BỘ bảng
+        for (let i = 0; i < squares.length; i++) {
+            if (squares[i].classList.contains('bomb')) continue;
+            let total = 0;
+            const n = getNeighbors(i);
+            n.forEach(neighborId => {
+                if (squares[neighborId].classList.contains('bomb')) total++;
+            });
+            squares[i].setAttribute('data-total', total);
         }
     }
-    return neighbors;
-  }
 
-  // --- GAMEPLAY FUNCTIONS (Giữ nguyên logic hiển thị) ---
+    // Xử lý Click trái (ĐÃ SỬA LOGIC CHORDING)
+    function click(square) {
+        let currentId = parseInt(square.id);
 
-  function reveal(square) {
-    if (square.classList.contains('revealed') || square.classList.contains('flag')) return;
-    
-    square.classList.add('revealed');
-    revealedCount++;
+        // 1. Chỉ chặn nếu game over hoặc ô đó đang có cờ
+        // (Bỏ chặn 'checked' ở đây để cho phép xử lý Chording)
+        if (isGameOver || square.classList.contains('flag')) return;
 
-    const number = square.getAttribute('data-number');
-    if (number) {
-      square.textContent = number;
-      square.classList.add(`num${number}`);
-      return;
-    }
+        // --- MỚI: LOGIC CHORDING (Click vào ô số đã mở) ---
+        if (square.classList.contains('checked')) {
+            let total = parseInt(square.getAttribute('data-total'));
+            let neighbors = getNeighbors(currentId);
+            let flagCount = 0;
 
-    const id = parseInt(square.dataset.id);
-    getNeighbors(id).forEach(nid => {
-        const neighbor = squares[nid];
-        if (!neighbor.classList.contains('revealed') && !neighbor.classList.contains('flag')) {
-            reveal(neighbor);
+            // Đếm số lượng cờ xung quanh
+            neighbors.forEach(nId => {
+                if (squares[nId].classList.contains('flag')) flagCount++;
+            });
+
+            // Nếu số cờ bằng con số của ô -> Mở tất cả hàng xóm chưa mở
+            if (total === flagCount) {
+                neighbors.forEach(nId => {
+                    // Chỉ click những ô chưa mở và chưa cắm cờ
+                    if (!squares[nId].classList.contains('checked') && !squares[nId].classList.contains('flag')) {
+                        click(squares[nId]); // Đệ quy gọi click cho ô hàng xóm
+                    }
+                });
+            }
+            return; // Xử lý xong Chording thì thoát, không chạy logic mở ô bên dưới
         }
-    });
-  }
 
-  function leftClick(square) {
-    if (isGameOver || square.classList.contains('flag')) return;
-
-    if (square.classList.contains('revealed') && square.getAttribute('data-number')) {
-      chordClick(square);
-      return;
-    }
-    if (square.classList.contains('revealed')) return;
-
-    if (firstClick) {
-      firstClick = false;
-      generateNoGuessingBombs(parseInt(square.dataset.id));
-      startTimer();
-    }
-
-    if (square.classList.contains('bomb')) {
-      gameOver(false);
-      return;
-    }
-
-    reveal(square);
-    checkWin();
-  }
-
-  function chordClick(square) {
-    const id = parseInt(square.dataset.id);
-    const number = parseInt(square.getAttribute('data-number'));
-    const neighbors = getNeighbors(id);
-    let flagCount = 0;
-    
-    neighbors.forEach(nid => {
-      if (squares[nid].classList.contains('flag')) flagCount++;
-    });
-
-    if (flagCount === number) {
-      neighbors.forEach(nid => {
-        const neighbor = squares[nid];
-        if (!neighbor.classList.contains('revealed') && !neighbor.classList.contains('flag')) {
-          if (neighbor.classList.contains('bomb')) {
-            gameOver(false);
+        // --- XỬ LÝ CLICK ĐẦU TIÊN ---
+        if (isFirstClick) {
+            placeBombs(currentId); 
+            isFirstClick = false;
+            startTimer();
+            checkSquare(currentId);
+            checkForWin();
             return; 
-          }
-          reveal(neighbor);
         }
-      });
-      checkWin();
+
+        // --- CÁC CLICK TIẾP THEO ---
+        if (square.classList.contains('bomb')) {
+            gameOver(square);
+        } else {
+            let total = parseInt(square.getAttribute('data-total'));
+            if (total !== 0) {
+                square.classList.add('checked');
+                square.innerText = total;
+                square.setAttribute('data-val', total);
+                checkForWin();
+            } else {
+                checkSquare(currentId);
+                checkForWin();
+            }
+        }
     }
-  }
 
-  function rightClick(square) {
-    if (isGameOver || square.classList.contains('revealed')) return;
-    square.classList.toggle('flag');
-    if (square.classList.contains('flag')) {
-      flags++;
-      square.textContent = '🚩';
-    } else {
-      flags--;
-      square.textContent = '';
+    // Đệ quy mở ô trống (Flood Fill)
+    function checkSquare(currentId) {
+        const isLeftEdge = (currentId % width === 0);
+        const isRightEdge = (currentId % width === width - 1);
+
+        setTimeout(() => {
+            if (squares[currentId].classList.contains('checked') || squares[currentId].classList.contains('flag')) return;
+            
+            squares[currentId].classList.add('checked');
+            
+            let total = parseInt(squares[currentId].getAttribute('data-total'));
+            
+            if (total !== 0) {
+                squares[currentId].innerText = total;
+                squares[currentId].setAttribute('data-val', total);
+                return;
+            }
+
+            const neighbors = getNeighbors(currentId);
+            neighbors.forEach(nId => checkSquare(nId));
+        }, 10);
     }
-    bombCountEl.textContent = (bombAmount - flags).toString().padStart(3, '0');
-  }
 
-  function gameOver(won) {
-    isGameOver = true;
-    clearInterval(timerInterval);
-    smiley.textContent = won ? '😎' : '💀';
+    // Lấy danh sách ID hàng xóm
+    function getNeighbors(id) {
+        const neighbors = [];
+        const isLeftEdge = (id % width === 0);
+        const isRightEdge = (id % width === width - 1);
 
-    squares.forEach(sq => {
-      if (sq.classList.contains('bomb')) {
-        sq.innerHTML = '💣';
-        sq.classList.add('revealed', 'bomb-revealed');
-      }
+        if (id >= width) {
+            neighbors.push(id - width);
+            if (!isLeftEdge) neighbors.push(id - 1 - width);
+            if (!isRightEdge) neighbors.push(id + 1 - width);
+        }
+        if (id < width * (height - 1)) {
+            neighbors.push(id + width);
+            if (!isLeftEdge) neighbors.push(id - 1 + width);
+            if (!isRightEdge) neighbors.push(id + 1 + width);
+        }
+        if (!isLeftEdge) neighbors.push(id - 1);
+        if (!isRightEdge) neighbors.push(id + 1);
+
+        return neighbors;
+    }
+
+    // Xử lý cắm cờ
+    function addFlag(square) {
+        if (isGameOver) return;
+        if (!square.classList.contains('checked')) {
+            if (!square.classList.contains('flag')) {
+                if (flags < bombCount) {
+                    square.classList.add('flag');
+                    square.innerHTML = '🚩';
+                    flags++;
+                    bombCountDisplay.innerText = (bombCount - flags).toString().padStart(3, '0');
+                    checkForWin();
+                }
+            } else {
+                square.classList.remove('flag');
+                square.innerHTML = '';
+                flags--;
+                bombCountDisplay.innerText = (bombCount - flags).toString().padStart(3, '0');
+            }
+        }
+    }
+
+    function checkForWin() {
+        let matches = 0;
+        let checkedCount = 0; 
+        
+        for (let i = 0; i < squares.length; i++) {
+            if (squares[i].classList.contains('checked')) {
+                checkedCount++;
+            }
+        }
+
+        if (checkedCount === (width * height - bombCount)) {
+            isWin = true;
+            isGameOver = true;
+            resultDisplay.innerText = 'YOU WIN!';
+            smiley.innerText = '😎';
+            clearInterval(timerId);
+            
+            squares.forEach(sq => {
+                if (sq.classList.contains('bomb') && !sq.classList.contains('flag')) {
+                    sq.classList.add('flag');
+                    sq.innerHTML = '🚩';
+                }
+            });
+
+            const currentBest = parseFloat(localStorage.getItem('minesweeper-best')) || 9999;
+            if (timeElapsed < currentBest) {
+                localStorage.setItem('minesweeper-best', timeElapsed);
+                bestTimeDisplay.innerText = timeElapsed;
+            }
+
+            if (window.confetti) {
+                confetti({
+                    particleCount: 150,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+            }
+        }
+    }
+
+    function gameOver(square) {
+        isGameOver = true;
+        resultDisplay.innerText = 'GAME OVER!';
+        smiley.innerText = '😵';
+        clearInterval(timerId);
+
+        squares.forEach(sq => {
+            if (sq.classList.contains('bomb')) {
+                sq.innerHTML = '💣';
+                sq.classList.add('checked');
+                if (sq === square) sq.style.backgroundColor = 'red'; 
+            }
+        });
+    }
+
+    function startTimer() {
+        clearInterval(timerId);
+        timerId = setInterval(() => {
+            timeElapsed++;
+            timerDisplay.innerText = timeElapsed.toString().padStart(3, '0');
+        }, 1000);
+    }
+
+    // Handle Custom Settings
+    applyCustomBtn.addEventListener('click', () => {
+        const w = parseInt(document.getElementById('custom-width').value);
+        const h = parseInt(document.getElementById('custom-height').value);
+        const b = parseInt(document.getElementById('custom-bombs').value);
+        const errorMsg = document.getElementById('error-message');
+
+        if (b >= (w * h - 9)) {
+            errorMsg.innerText = "Quá nhiều bom! Phải chừa khoảng trống.";
+            errorMsg.style.display = 'block';
+            return;
+        }
+        errorMsg.style.display = 'none';
+        
+        width = w;
+        height = h;
+        bombCount = b;
+        startBoard();
+        customSettings.classList.remove('show');
     });
 
-    result.textContent = won ? '🎉 BẠN ĐÃ THẮNG! 🎉' : '💥 BÙM! Thử lại nhé...';
-    result.style.color = won ? 'green' : 'red';
+    levelBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            levelBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const level = btn.getAttribute('data-level');
+            initGame(level);
+        });
+    });
 
-    if (won) {
-      if (typeof confetti === 'function') {
-        confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
-      }
-      saveBestTime();
-    }
-  }
+    themeToggle.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        themeToggle.innerText = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
+    });
 
-  function checkWin() {
-    if (revealedCount + bombAmount === totalCells) {
-      gameOver(true);
-    }
-  }
+    smiley.addEventListener('click', () => {
+        const activeBtn = document.querySelector('.levels button.active');
+        const level = activeBtn ? activeBtn.getAttribute('data-level') : 'medium';
+        if (level === 'custom') {
+            grid.innerHTML = '';
+            squares = [];
+            isGameOver = false;
+            isFirstClick = true;
+            flags = 0;
+            timeElapsed = 0;
+            bombCountDisplay.innerText = bombCount;
+            timerDisplay.innerText = '000';
+            smiley.innerText = '🙂';
+            resultDisplay.innerText = '';
+            startBoard();
+        } else {
+            initGame(level);
+        }
+    });
 
-  function startTimer() {
-    clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-      seconds++;
-      timerEl.textContent = seconds.toString().padStart(3, '0');
-    }, 1000);
-  }
-
-  function saveBestTime() {
-    const key = `minesweeper_best_${width}x${height}_${bombAmount}`;
-    const currentBest = localStorage.getItem(key);
-    if (!currentBest || seconds < parseInt(currentBest)) {
-      localStorage.setItem(key, seconds);
-      bestTimeEl.textContent = seconds;
-    }
-  }
-
-  function loadBestTime(level) {
-    let config;
-    if (level === 'custom') {
-        config = levels.custom || { w: width, h: height, bombs: bombAmount };
-        if (!config || !config.w) return;
-    } else {
-        config = levels[level];
-    }
-    const key = `minesweeper_best_${config.w}x${config.h}_${config.bombs}`;
-    const best = localStorage.getItem(key);
-    bestTimeEl.textContent = best ? best : '---';
-  }
-
-  // Khởi chạy
-  initGame('medium');
+    bestTimeDisplay.innerText = localStorage.getItem('minesweeper-best') || '--';
+    initGame('medium');
 });
