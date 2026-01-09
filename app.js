@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const LEVELS = {
         easy: { width: 9, height: 9, bombs: 10 },
         medium: { width: 16, height: 16, bombs: 40 },
-        hard: { width: 30, height: 16, bombs: 99 }
+        hard: { width: 30, height: 16, bombs: 99 } // No Guessing trên Hard có thể mất 1-2 giây để tạo map
     };
     
     // --- BIẾN TRẠNG THÁI ---
@@ -80,31 +80,66 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- LOGIC GAME QUAN TRỌNG: Rải bom tránh vùng click ---
+    // --- HELPER CHO NO GUESSING ---
+    // Dọn dẹp dữ liệu bàn cờ để thử tạo lại
+    function resetBoardDataForRetry() {
+        squares.forEach(sq => {
+            sq.classList.remove('bomb', 'valid');
+            sq.removeAttribute('data');
+            sq.removeAttribute('data-total');
+        });
+    }
+
+    // --- LOGIC TẠO MAP NO GUESSING ---
     function placeBombs(firstClickIndex) {
-        // 1. Xác định "Vùng an toàn" (Safe Zone)
-        const neighbors = getNeighbors(firstClickIndex);
-        const safeZone = [firstClickIndex, ...neighbors];
+        letAttempts = 0;
+        const maxAttempts = 500; // Giới hạn số lần thử để tránh treo trình duyệt
+        let isSolvable = false;
+        let finalBombIndices = [];
 
-        // 2. Tìm tất cả các vị trí còn lại trong bảng có thể đặt bom
-        let validLocations = [];
-        for (let i = 0; i < width * height; i++) {
-            if (!safeZone.includes(i)) {
-                validLocations.push(i);
+        // Vòng lặp Tạo và Kiểm tra
+        do {
+            letAttempts++;
+            resetBoardDataForRetry();
+
+            // 1. Xác định vùng an toàn cho click đầu
+            const neighbors = getNeighbors(firstClickIndex);
+            const safeZone = [firstClickIndex, ...neighbors];
+
+            // 2. Tìm vị trí hợp lệ
+            let validLocations = [];
+            for (let i = 0; i < width * height; i++) {
+                if (!safeZone.includes(i)) {
+                    validLocations.push(i);
+                }
             }
-        }
 
-        // 3. Xáo trộn danh sách vị trí hợp lệ
-        validLocations.sort(() => Math.random() - 0.5);
+            // 3. Rải bom ngẫu nhiên
+            validLocations.sort(() => Math.random() - 0.5);
+            let actualBombsCount = Math.min(bombCount, validLocations.length);
+            finalBombIndices = validLocations.slice(0, actualBombsCount);
 
-        // 4. Lấy n vị trí đầu tiên để đặt bom
-        let actualBombsCount = Math.min(bombCount, validLocations.length);
-        const bombIndices = validLocations.slice(0, actualBombsCount);
+            // 4. CHẠY MÔ PHỎNG GIẢI ĐỐ (Solver Simulation)
+            // Nếu đây là lần thử cuối cùng, chấp nhận luôn map đó dù có phải đoán hay không
+            if (letAttempts >= maxAttempts) {
+                console.log("Max attempts reached. Using best effort map.");
+                isSolvable = true; 
+            } else {
+                 // Kiểm tra xem map vừa tạo có giải được bằng logic không
+                isSolvable = runSolverSimulation(finalBombIndices, safeZone);
+            }
 
-        // 5. Cập nhật dữ liệu cho các ô trên bàn cờ
+        } while (!isSolvable);
+
+        console.log(`Map generated in ${letAttempts} attempts.`);
+
+        // 5. Áp dụng vị trí bom đã chọn vào bàn cờ thật
+        finalizeBoard(finalBombIndices);
+    }
+
+    // Áp dụng bom và tính số sau khi đã chốt map
+    function finalizeBoard(bombIndices) {
         squares.forEach((sq, index) => {
-            sq.classList.remove('bomb', 'valid'); 
-            
             if (bombIndices.includes(index)) {
                 sq.classList.add('bomb');
                 sq.setAttribute('data', 'bomb');
@@ -114,7 +149,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         
-        // 6. Tính toán số bom xung quanh (data-total) cho TOÀN BỘ bảng
         for (let i = 0; i < squares.length; i++) {
             if (squares[i].classList.contains('bomb')) continue;
             let total = 0;
@@ -126,39 +160,136 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Xử lý Click trái (ĐÃ SỬA LOGIC CHORDING)
+
+    // --- THUẬT TOÁN MÔ PHỎNG NGƯỜI CHƠI (SOLVER) ---
+    function runSolverSimulation(currentBombIndices, initialSafeZone) {
+        let totalCells = width * height;
+        let simRevealed = new Set([...initialSafeZone]); // Những ô AI đã mở
+        let simFlags = new Set(); // Những ô AI đã cắm cờ
+        let simHidden = new Set(); // Những ô còn ẩn
+
+        // Khởi tạo danh sách ô ẩn
+        for(let i=0; i<totalCells; i++) {
+            if(!simRevealed.has(i)) simHidden.add(i);
+        }
+
+        let progressMade = true;
+
+        // Vòng lặp chính: Chạy liên tục miễn là còn suy luận được bước mới
+        while (progressMade) {
+            progressMade = false;
+            let cellsToReveal = new Set();
+            let cellsToFlag = new Set();
+
+            // Duyệt qua tất cả các ô đã mở có số > 0 (biên giới của vùng đã mở)
+            simRevealed.forEach(index => {
+                 // Tính toán số bom thực tế xung quanh ô này (AI biết số này khi ô đã mở)
+                let actualNumber = 0;
+                let myNeighbors = getNeighbors(index);
+                myNeighbors.forEach(nId => {
+                    if(currentBombIndices.includes(nId)) actualNumber++;
+                });
+
+                if (actualNumber === 0) return; // Ô số 0 không cung cấp thông tin
+
+                let hiddenNeighbors = [];
+                let flaggedNeighbors = 0;
+
+                myNeighbors.forEach(nId => {
+                    if (simHidden.has(nId)) hiddenNeighbors.push(nId);
+                    if (simFlags.has(nId)) flaggedNeighbors++;
+                });
+
+                // RULE 1: Basic Flagging logic
+                // Nếu số ô ẩn bằng chính con số của ô đó -> Tất cả ô ẩn là bom
+                // Ví dụ: Số 2, có 2 ô ẩn xung quanh và 0 cờ -> Cả 2 ô ẩn phải là bom
+                if (hiddenNeighbors.length > 0 && hiddenNeighbors.length === (actualNumber - flaggedNeighbors)) {
+                    hiddenNeighbors.forEach(hiddenId => cellsToFlag.add(hiddenId));
+                }
+
+                // RULE 2: Basic Clearing logic (Chording simulation)
+                // Nếu số cờ xung quanh đã bằng con số của ô đó -> Tất cả ô ẩn còn lại là an toàn
+                // Ví dụ: Số 2, đã có 2 cờ xung quanh -> Mở các ô ẩn còn lại
+                if (hiddenNeighbors.length > 0 && flaggedNeighbors === actualNumber) {
+                    hiddenNeighbors.forEach(hiddenId => cellsToReveal.add(hiddenId));
+                }
+            });
+
+            // Áp dụng các suy luận mới
+            cellsToFlag.forEach(id => {
+                if (!simFlags.has(id)) {
+                    simFlags.add(id);
+                    simHidden.delete(id);
+                    progressMade = true; // Đã có tiến triển
+                }
+            });
+
+            cellsToReveal.forEach(id => {
+                if (!simRevealed.has(id) && !simFlags.has(id)) {
+                    simRevealed.add(id);
+                    simHidden.delete(id);
+                    progressMade = true; // Đã có tiến triển
+                }
+            });
+
+            // Mở lan (Flood fill) cho các ô số 0 mới được mở trong mô phỏng
+            let newlyRevealedArr = Array.from(cellsToReveal);
+            while(newlyRevealedArr.length > 0) {
+                 let currentId = newlyRevealedArr.pop();
+                 // Kiểm tra xem ô này có phải số 0 không
+                 let isZero = true;
+                 getNeighbors(currentId).forEach(nId => {
+                     if(currentBombIndices.includes(nId)) isZero = false;
+                 });
+                 
+                 if(isZero) {
+                    getNeighbors(currentId).forEach(nId => {
+                        if(simHidden.has(nId) && !simFlags.has(nId)) {
+                            simRevealed.add(nId);
+                            simHidden.delete(nId);
+                            newlyRevealedArr.push(nId); // Thêm vào hàng đợi để tiếp tục kiểm tra loang
+                        }
+                    });
+                 }
+            }
+        }
+
+        // Kết thúc mô phỏng: Kiểm tra xem số ô đã mở + số bom có bằng tổng số ô không
+        // Nếu bằng, nghĩa là AI đã giải quyết được toàn bộ bàn cờ mà không cần đoán.
+        return (simRevealed.size + currentBombIndices.length) === totalCells;
+    }
+
+
+    // --- CÁC HÀM XỬ LÝ GAMEPLAY CHÍNH (GIỮ NGUYÊN TỪ CODE CŨ) ---
+    // Xử lý Click trái
     function click(square) {
         let currentId = parseInt(square.id);
 
-        // 1. Chỉ chặn nếu game over hoặc ô đó đang có cờ
-        // (Bỏ chặn 'checked' ở đây để cho phép xử lý Chording)
         if (isGameOver || square.classList.contains('flag')) return;
 
-        // --- MỚI: LOGIC CHORDING (Click vào ô số đã mở) ---
+        // Logic Chording
         if (square.classList.contains('checked')) {
             let total = parseInt(square.getAttribute('data-total'));
             let neighbors = getNeighbors(currentId);
             let flagCount = 0;
 
-            // Đếm số lượng cờ xung quanh
             neighbors.forEach(nId => {
                 if (squares[nId].classList.contains('flag')) flagCount++;
             });
 
-            // Nếu số cờ bằng con số của ô -> Mở tất cả hàng xóm chưa mở
             if (total === flagCount) {
                 neighbors.forEach(nId => {
-                    // Chỉ click những ô chưa mở và chưa cắm cờ
                     if (!squares[nId].classList.contains('checked') && !squares[nId].classList.contains('flag')) {
-                        click(squares[nId]); // Đệ quy gọi click cho ô hàng xóm
+                        click(squares[nId]);
                     }
                 });
             }
-            return; // Xử lý xong Chording thì thoát, không chạy logic mở ô bên dưới
+            return;
         }
 
-        // --- XỬ LÝ CLICK ĐẦU TIÊN ---
+        // XỬ LÝ CLICK ĐẦU TIÊN
         if (isFirstClick) {
+            // Gọi hàm placeBombs mới (có tích hợp No Guessing)
             placeBombs(currentId); 
             isFirstClick = false;
             startTimer();
@@ -167,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return; 
         }
 
-        // --- CÁC CLICK TIẾP THEO ---
+        // CÁC CLICK TIẾP THEO
         if (square.classList.contains('bomb')) {
             gameOver(square);
         } else {
