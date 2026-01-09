@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Minesweeper - No Guessing Mode</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header-top">
+      <h1>💣 MINESWEEPER 💣</h1>
+      <button class="theme-toggle" id="theme-toggle" title="Chuyển chế độ sáng/tối">🌙</button>
+    </div>
+
+    <div class="mode-info">
+      <span class="badge">🧠 NO GUESSING MODE</span>
+      <span class="tooltip">Tất cả các bom có thể được suy luận logic!</span>
+    </div>
+
+    <div class="header">
+      <div class="info">
+        <div><span id="bomb-count">?</span> 💣</div>
+        <div class="smiley" id="smiley" title="Nhấn để chơi lại">🙂</div>
+        <div><span id="timer">000</span> ⏱️</div>
+      </div>
+
+      <div class="levels">
+        <button data-level="easy">Dễ (9×9)</button>
+        <button data-level="medium" class="active">Trung bình (16×16)</button>
+        <button data-level="hard">Khó (30×16)</button>
+        <button data-level="custom" id="custom-btn">Tùy chỉnh ⚙️</button>
+      </div>
+    </div>
+
+    <div class="custom-settings" id="custom-settings">
+      <h3>⚙️ Cài đặt tùy chỉnh</h3>
+      <div class="input-group">
+        <label>
+          Chiều rộng (5-50):
+          <input type="number" id="custom-width" min="5" max="50" value="16">
+        </label>
+        <label>
+          Chiều cao (5-30):
+          <input type="number" id="custom-height" min="5" max="30" value="16">
+        </label>
+        <label>
+          Số bom:
+          <input type="number" id="custom-bombs" min="1" value="40">
+        </label>
+      </div>
+      <div class="error-message" id="error-message">Số bom không hợp lệ! Tối đa là 80% số ô.</div>
+      <button id="apply-custom">Áp dụng</button>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div id="result"></div>
+
+    <div class="highscore">
+      🏆 Thời gian tốt nhất: <span id="best-time">---</span>s
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
