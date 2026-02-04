@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Minesweeper Pro</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+  
+  <div id="main-menu" class="overlay">
+      <div class="menu-box">
+          <h1>💣 MINESWEEPER</h1>
+          <button id="btn-offline" class="menu-btn">Chơi Offline</button>
+          <hr>
+          <button id="btn-open-create-options" class="menu-btn primary" style="background:#4CAF50; color:white">Tạo Phòng Online</button> 
+          
+          <div class="join-group" style="display:flex; gap:5px; margin-top:10px;">
+              <input type="text" id="room-code-input" placeholder="MÃ PHÒNG..." maxlength="5" style="flex:1; padding:10px; text-align:center; font-weight:bold; text-transform:uppercase;">
+              <button id="btn-join-room" class="menu-btn" style="width:auto">Vào</button>
+          </div>
+          <p id="menu-status" style="color:red; margin-top:5px; min-height:20px"></p>
+      </div>
+  </div>
+
+  <div id="theme-menu" class="overlay hidden">
+      <div class="menu-box">
+          <h2>🎨 CHỌN GIAO DIỆN</h2>
+          <div class="theme-select-grid">
+              <button class="theme-btn t-modern" onclick="setAppTheme('modern')">Modern</button>
+              <button class="theme-btn t-retro" onclick="setAppTheme('retro')">Retro 95</button>
+              <button class="theme-btn t-neon" onclick="setAppTheme('neon')">Neon Cyber</button>
+              <button class="theme-btn t-dark" onclick="setAppTheme('dark')">Midnight</button>
+          </div>
+          <button class="menu-btn" id="btn-close-theme" style="margin-top:20px; background:#ff5252; color:white">Đóng</button>
+      </div>
+  </div>
+
+  <div id="custom-menu" class="overlay hidden">
+      <div class="menu-box">
+          <h2>⚙️ TÙY CHỈNH</h2>
+          <div style="display:flex; gap:10px; justify-content:center; margin: 20px 0;">
+              <label>Rộng<br><input type="number" id="custom-width" value="20" min="5" max="50" style="width:60px; text-align:center; padding:5px;"></label>
+              <label>Cao<br><input type="number" id="custom-height" value="20" min="5" max="50" style="width:60px; text-align:center; padding:5px;"></label>
+              <label>Bom<br><input type="number" id="custom-bombs" value="50" min="1" style="width:60px; text-align:center; padding:5px;"></label>
+          </div>
+          <button id="apply-custom" class="menu-btn primary" style="background:#4CAF50; color:white">Áp dụng & Chơi</button>
+          <button id="close-custom" class="menu-btn danger" style="background:#ff5252; color:white; margin-top:5px;">Hủy</button>
+      </div>
+  </div>
+
+  <div id="create-options" class="overlay hidden">
+      <div class="menu-box">
+          <h2>Cấu hình Online</h2>
+          <div class="levels-select">
+              <button class="level-opt active" data-lvl="easy">Dễ (9x9)</button>
+              <button class="level-opt" data-lvl="medium">Vừa (16x16)</button>
+              <button class="level-opt" data-lvl="hard">Khó (30x16)</button>
+              <button class="level-opt" data-lvl="custom">Tùy chỉnh</button>
+          </div>
+          <div id="online-custom-inputs" class="hidden" style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
+              <label>Rộng: <input type="number" id="onl-w" value="20" style="width:50px"></label>
+              <label>Cao: <input type="number" id="onl-h" value="20" style="width:50px"></label>
+              <label>Bom: <input type="number" id="onl-b" value="50" style="width:50px"></label>
+          </div>
+          <button id="btn-confirm-create" class="menu-btn primary" style="background:#4CAF50; color:white; margin-top:20px;">Tạo Phòng</button>
+          <button id="btn-back-menu" class="menu-btn danger" style="background:#ff5252; color:white">Quay lại</button>
+      </div>
+  </div>
+
+  <div id="online-waiting" class="overlay hidden">
+      <div class="menu-box">
+          <h2 id="waiting-title">Đang chờ đối thủ...</h2>
+          <div style="font-size:24px; background:#fff; color:#000; padding:10px; margin:15px 0; border:2px dashed #000; font-weight:bold;">
+              Mã: <span id="display-room-code">---</span>
+          </div>
+          <p id="countdown-display" style="font-size:30px; color:gold; font-weight:bold;"></p>
+          <button id="btn-cancel-wait" class="menu-btn danger" style="background:#ff5252; color:white">Hủy bỏ</button>
+      </div>
+  </div>
+
+  <div class="container">
+    <div id="online-status-bar" class="progress-container hidden">
+        <div class="progress-wrapper">
+            <span>Bạn</span>
+            <div class="progress-bar"><div id="my-progress" style="width: 0%"></div></div>
+        </div>
+        <div class="progress-wrapper">
+            <span>Đối thủ</span>
+            <div class="progress-bar"><div id="opponent-progress" style="width: 0%"></div></div>
+        </div>
+    </div>
+
+    <div class="header-top">
+      <h1>💣 MINESWEEPER <span id="online-indicator" class="hidden" style="color:gold; animation: blink 1s infinite;">(ONLINE)</span></h1>
+      <button class="btn-theme-open" id="btn-open-theme">🎨 Theme</button>
+    </div>
+
+    <div class="header">
+      <div class="info">
+        <div title="Số bom"><span id="bomb-count">000</span> 💣</div>
+        <div class="smiley" id="smiley">🙂</div>
+        <div title="Thời gian"><span id="timer">000</span> ⏱️</div>
+      </div>
+
+      <div class="levels" id="level-btns">
+        <button data-level="easy">Dễ</button>
+        <button data-level="medium" class="active">Vừa</button>
+        <button data-level="hard">Khó</button>
+        <button data-level="custom" id="custom-btn">Tùy chỉnh</button>
+      </div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div id="result"></div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+      function setAppTheme(theme) {
+          document.body.className = ''; 
+          if(theme !== 'modern') document.body.classList.add('theme-' + theme);
+          localStorage.setItem('ms-theme', theme);
+          document.getElementById('theme-menu').classList.add('hidden');
+      }
+      const savedTheme = localStorage.getItem('ms-theme') || 'modern';
+      setAppTheme(savedTheme);
+  </script>
+</body>
+</html>

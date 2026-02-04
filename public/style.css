@@ -1,0 +1,238 @@
+/* --- CSS VARIABLES & THEMES --- */
+:root {
+    /* Default Theme (Modern) */
+    --bg-body: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --bg-container: #e0e0e0;
+    --border-main: #fff;
+    --shadow-main: rgba(0,0,0,0.5);
+    
+    --bg-header: #dcdcdc;
+    --bg-lcd: #000;
+    --color-lcd: #ff0000;
+    
+    --bg-cell: #c0c0c0;
+    --bg-cell-checked: #dcdcdc;
+    --border-cell-light: #fff;
+    --border-cell-dark: #808080;
+    --border-style: outset;
+    --cell-hover: brightness(1.1);
+    
+    --text-primary: #333;
+    --font-main: 'Roboto Mono', monospace;
+    --glow: none;
+}
+
+/* Theme: Retro (Windows 95) */
+body.theme-retro {
+    --bg-body: #008080;
+    --bg-container: #c0c0c0;
+    --border-main: #dfdfdf;
+    
+    --bg-header: #c0c0c0;
+    --bg-lcd: #000;
+    --color-lcd: #ff0000;
+    
+    --bg-cell: #c0c0c0;
+    --bg-cell-checked: #c0c0c0;
+    --border-cell-light: #fff;
+    --border-cell-dark: #808080;
+    --border-style: outset;
+    
+    --text-primary: #000;
+}
+
+/* Theme: Neon (Cyberpunk) */
+body.theme-neon {
+    --bg-body: #050505;
+    --bg-container: #111;
+    --border-main: #0ff;
+    --shadow-main: 0 0 20px #0ff;
+    
+    --bg-header: #222;
+    --bg-lcd: #000;
+    --color-lcd: #0ff;
+    
+    --bg-cell: #222;
+    --bg-cell-checked: #333;
+    --border-cell-light: #0ff;
+    --border-cell-dark: #008888;
+    --border-style: solid;
+    --cell-hover: drop-shadow(0 0 5px #0ff);
+    
+    --text-primary: #0ff;
+    --font-main: 'Courier New', monospace;
+    --glow: 0 0 5px #0ff;
+}
+body.theme-neon .square { border-width: 1px; }
+
+/* Theme: Dark (Midnight) */
+body.theme-dark {
+    --bg-body: #1a1a2e;
+    --bg-container: #2a2a3e;
+    --border-main: #4a4a5e;
+    
+    --bg-header: #33334d;
+    --bg-lcd: #000;
+    --color-lcd: #ff5252;
+    
+    --bg-cell: #3a3a4e;
+    --bg-cell-checked: #252535;
+    --border-cell-light: #4a4a5e;
+    --border-cell-dark: #1a1a1a;
+    --border-style: outset;
+    
+    --text-primary: #fff;
+}
+
+/* --- RESET & BASIC SETUP --- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: var(--font-main);
+    background: var(--bg-body);
+    min-height: 100vh;
+    display: flex; justify-content: center; align-items: center;
+    padding: 20px; user-select: none;
+    transition: background 0.5s ease;
+}
+
+.container {
+    background: var(--bg-container);
+    padding: 15px;
+    border: 3px solid var(--border-main);
+    box-shadow: var(--shadow-main);
+    border-radius: 4px;
+    display: flex; flex-direction: column; align-items: center;
+    max-width: 95vw;
+}
+
+/* --- HEADER --- */
+.header-top { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+h1 { font-size: 20px; color: var(--text-primary); text-shadow: var(--glow); }
+
+/* Nút Theme mới */
+.btn-theme-open {
+    background: none; border: 1px solid var(--text-primary);
+    padding: 5px 10px; cursor: pointer; border-radius: 4px;
+    font-size: 16px; color: var(--text-primary);
+}
+
+.header {
+    background: var(--bg-header);
+    border: 2px solid var(--border-cell-dark);
+    padding: 10px; width: 100%; margin-bottom: 15px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+
+.info {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 24px; font-weight: bold;
+    background: var(--bg-lcd); color: var(--color-lcd);
+    padding: 5px 10px; border: 2px inset #888;
+    font-family: 'Courier New', Courier, monospace; /* Font số điện tử */
+    text-shadow: 0 0 2px var(--color-lcd);
+}
+
+.smiley {
+    cursor: pointer; background: var(--bg-cell);
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px var(--border-style);
+    border-color: var(--border-cell-light) var(--border-cell-dark) var(--border-cell-dark) var(--border-cell-light);
+    border-radius: 50%;
+}
+.smiley:active { border-style: inset; }
+
+/* --- GRID & SQUARES --- */
+.grid {
+    display: grid; gap: 0;
+    background: var(--border-cell-dark);
+    border: 4px solid var(--border-cell-dark);
+}
+
+.square {
+    width: 30px; height: 30px;
+    background: var(--bg-cell);
+    border: 3px var(--border-style);
+    border-color: var(--border-cell-light) var(--border-cell-dark) var(--border-cell-dark) var(--border-cell-light);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; cursor: pointer; font-size: 18px;
+    color: var(--text-primary);
+}
+
+.square:hover:not(.checked) { filter: var(--cell-hover); z-index: 1; }
+
+.square.checked {
+    background: var(--bg-cell-checked);
+    border: 1px solid var(--border-cell-dark); /* Phẳng xuống */
+    cursor: default;
+}
+
+/* Màu số */
+.square[data-val="1"] { color: blue; }
+.square[data-val="2"] { color: green; }
+.square[data-val="3"] { color: red; }
+.square[data-val="4"] { color: darkblue; }
+.square[data-val="5"] { color: brown; }
+/* Neon Theme Override cho số */
+body.theme-neon .square[data-val] { color: #0ff; text-shadow: 0 0 5px #0ff; }
+body.theme-retro .square[data-val="1"] { color: blue; }
+
+#result { height: 20px; font-weight: bold; margin-top: 10px; color: var(--text-primary); text-shadow: var(--glow); }
+
+/* --- UI ELEMENTS (Buttons, Progress) --- */
+button {
+    padding: 5px 10px; font-family: inherit; font-size: 12px; cursor: pointer;
+    border: 2px outset #fff; background: #c0c0c0; color: #000;
+}
+button:active { border-style: inset; }
+button.active { background: #a0a0a0; font-weight: bold; border-style: inset; }
+
+/* Styles riêng cho các nút Theme trong Modal */
+.theme-select-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;
+}
+.theme-btn {
+    height: 80px; border: 2px solid #fff; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; font-weight: bold;
+    transition: transform 0.2s;
+}
+.theme-btn:hover { transform: scale(1.05); }
+
+/* Preview Colors trên nút */
+.theme-btn.t-modern { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+.theme-btn.t-retro { background: #008080; color: #fff; border: 2px outset #fff; font-family: 'Courier New'; }
+.theme-btn.t-neon { background: #000; color: #0ff; border: 1px solid #0ff; box-shadow: 0 0 10px #0ff; }
+.theme-btn.t-dark { background: #1a1a2e; color: #fff; border: 1px solid #4a4a5e; }
+
+/* Progress Bar */
+.progress-container {
+    width: 100%; margin-bottom: 15px; background: rgba(255,255,255,0.2);
+    padding: 10px; border: 2px inset rgba(255,255,255,0.5); border-radius: 4px;
+}
+.progress-wrapper span { width: 70px; font-weight: bold; font-size: 14px; color: var(--text-primary); }
+.progress-bar { flex: 1; height: 15px; background: rgba(0,0,0,0.5); border: 1px solid var(--text-primary); position: relative; border-radius: 2px; overflow: hidden; }
+.progress-bar div { height: 100%; background: #4CAF50; width: 0%; transition: width 0.3s ease; }
+body.theme-neon .progress-bar div { background: #0ff; box-shadow: 0 0 10px #0ff; }
+
+/* --- OVERLAY --- */
+.overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85); z-index: 1000;
+    display: flex; justify-content: center; align-items: center;
+    backdrop-filter: blur(5px);
+}
+.hidden { display: none !important; }
+
+.menu-box {
+    background: var(--bg-container);
+    border: 3px solid var(--text-primary);
+    padding: 30px; text-align: center;
+    max-width: 400px; width: 90%;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    color: var(--text-primary);
+}
+.menu-btn { width: 100%; padding: 12px; margin: 10px 0; font-size: 16px; font-weight: bold; background: #fff; border: 2px solid #000;}
+.levels-select { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-bottom: 15px; }
+.levels-select button { width: 100%; height: 50px; }
+.input-group label { color: var(--text-primary); }
